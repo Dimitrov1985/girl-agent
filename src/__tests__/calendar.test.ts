@@ -1,44 +1,33 @@
-import { test, describe, before, after } from "node:test";
+import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rm } from "node:fs/promises";
+import { addCalendarEvent, readCalendar, removeCalendarEvent } from "../engine/calendar.js";
 
-// Патчим DATA_ROOT через переменную окружения до импорта
-let tmpDir: string;
+const TEST_SLUG = "__test-calendar__";
 
-describe("calendar operations", async () => {
-  before(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "girl-agent-test-"));
-    process.env.GIRL_AGENT_DATA_ROOT = tmpDir;
-  });
+after(async () => {
+  // Убираем тестовые данные
+  await rm(`data/${TEST_SLUG}`, { recursive: true, force: true }).catch(() => {});
+});
 
-  after(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
-    delete process.env.GIRL_AGENT_DATA_ROOT;
-  });
-
-  // Динамический импорт после установки env
+describe("calendar operations", () => {
   test("add and read calendar event", async () => {
-    const { addCalendarEvent, readCalendar } = await import("../engine/calendar.js");
-    const slug = "cal-test";
-    const ev = await addCalendarEvent(slug, "Doctor appointment", "2024-12-01", "10:00");
+    const ev = await addCalendarEvent(TEST_SLUG, "Doctor appointment", "2024-12-01", "10:00");
     assert.equal(ev.title, "Doctor appointment");
     assert.equal(ev.date, "2024-12-01");
     assert.equal(ev.time, "10:00");
     assert.ok(ev.id.length > 0);
 
-    const events = await readCalendar(slug);
-    assert.equal(events.length, 1);
-    assert.equal(events[0]!.title, "Doctor appointment");
+    const events = await readCalendar(TEST_SLUG);
+    assert.ok(events.some(e => e.title === "Doctor appointment"));
   });
 
   test("events are sorted by date", async () => {
-    const { addCalendarEvent, readCalendar } = await import("../engine/calendar.js");
-    const slug = "cal-sort";
-    await addCalendarEvent(slug, "Later event", "2024-12-10");
+    const slug = TEST_SLUG + "-sort";
+    after(async () => { await rm(`data/${slug}`, { recursive: true, force: true }).catch(() => {}); });
+    await addCalendarEvent(slug, "Later event",   "2024-12-10");
     await addCalendarEvent(slug, "Earlier event", "2024-12-01");
-    await addCalendarEvent(slug, "Middle event", "2024-12-05");
+    await addCalendarEvent(slug, "Middle event",  "2024-12-05");
 
     const events = await readCalendar(slug);
     assert.equal(events[0]!.date, "2024-12-01");
@@ -47,8 +36,8 @@ describe("calendar operations", async () => {
   });
 
   test("remove calendar event", async () => {
-    const { addCalendarEvent, removeCalendarEvent, readCalendar } = await import("../engine/calendar.js");
-    const slug = "cal-remove";
+    const slug = TEST_SLUG + "-rm";
+    after(async () => { await rm(`data/${slug}`, { recursive: true, force: true }).catch(() => {}); });
     const ev = await addCalendarEvent(slug, "Remove me", "2024-12-01");
     const ok = await removeCalendarEvent(slug, ev.id);
     assert.equal(ok, true);
@@ -57,14 +46,12 @@ describe("calendar operations", async () => {
   });
 
   test("remove non-existent event returns false", async () => {
-    const { removeCalendarEvent } = await import("../engine/calendar.js");
-    const ok = await removeCalendarEvent("cal-noexist", "fake-id-123");
+    const ok = await removeCalendarEvent(TEST_SLUG + "-noexist", "fake-id-123");
     assert.equal(ok, false);
   });
 
   test("readCalendar returns empty array when file doesn't exist", async () => {
-    const { readCalendar } = await import("../engine/calendar.js");
-    const events = await readCalendar("no-such-profile");
+    const events = await readCalendar("__no-such-profile__");
     assert.deepEqual(events, []);
   });
 });

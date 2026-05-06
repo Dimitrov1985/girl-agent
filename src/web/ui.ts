@@ -137,12 +137,26 @@ export function getUI(token?: string): string {
   }
   .mem-tab:hover{border-color:var(--border2);color:var(--text)}
   .mem-tab.active{background:var(--accent2);border-color:var(--accent2);color:#fff}
+  .mem-toolbar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px}
+  .mem-btn{
+    padding:5px 12px;border-radius:var(--radius);border:1px solid var(--border);
+    background:var(--bg3);color:var(--text2);cursor:pointer;font-size:12px;transition:all .15s;
+  }
+  .mem-btn:hover{border-color:var(--border2);color:var(--text)}
+  .mem-btn.save{background:var(--accent2);border-color:var(--accent2);color:#fff}
+  .mem-btn.save:hover{background:var(--accent)}
   .mem-content{
     background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);
     padding:14px;font-family:var(--font-mono);font-size:12px;color:var(--text2);
     white-space:pre-wrap;word-break:break-word;line-height:1.8;min-height:200px;
   }
+  .mem-editor{
+    width:100%;background:var(--bg3);border:1px solid var(--accent2);border-radius:var(--radius);
+    padding:14px;font-family:var(--font-mono);font-size:12px;color:var(--text);
+    line-height:1.8;resize:vertical;min-height:300px;outline:none;
+  }
   .mem-empty{color:var(--text3);font-style:italic}
+  .mem-saved{color:var(--green);font-size:11px;padding:4px 0}
 
   /* History */
   .hist-days{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
@@ -236,7 +250,14 @@ export function getUI(token?: string): string {
             `<div class="mem-tab${i===0?" active":""}" data-file="${f}">${f.replace("memory/","")}</div>`
           ).join("")}
         </div>
+        <div class="mem-toolbar">
+          <span class="mem-saved" id="mem-saved"></span>
+          <button class="mem-btn" id="mem-edit-btn">✎ Редактировать</button>
+          <button class="mem-btn save" id="mem-save-btn" style="display:none">💾 Сохранить</button>
+          <button class="mem-btn" id="mem-cancel-btn" style="display:none">✕ Отмена</button>
+        </div>
         <div class="mem-content" id="mem-content"><span class="mem-empty">загрузка...</span></div>
+        <textarea class="mem-editor" id="mem-editor" style="display:none"></textarea>
       </div>
 
       <!-- History panel -->
@@ -371,11 +392,14 @@ document.querySelectorAll(".tab").forEach(tab => {
 
 // ── Memory ───────────────────────────────────────────────────────────────────
 let currentMemFile = "persona.md";
+let memEditMode = false;
+
 document.querySelectorAll(".mem-tab").forEach(t => {
   t.addEventListener("click", () => {
     document.querySelectorAll(".mem-tab").forEach(x => x.classList.remove("active"));
     t.classList.add("active");
     currentMemFile = t.dataset.file;
+    exitEditMode();
     loadMemoryFile(currentMemFile);
   });
 });
@@ -386,7 +410,64 @@ async function loadMemoryFile(file) {
   const content = await apiText("/api/memory/" + encodeURIComponent(file));
   el.textContent = content || "";
   if (!content) el.innerHTML = '<span class="mem-empty">(файл пуст)</span>';
+  document.getElementById("mem-editor").value = content || "";
 }
+
+function enterEditMode() {
+  memEditMode = true;
+  const content = document.getElementById("mem-content");
+  const editor = document.getElementById("mem-editor");
+  const editBtn = document.getElementById("mem-edit-btn");
+  const saveBtn = document.getElementById("mem-save-btn");
+  const cancelBtn = document.getElementById("mem-cancel-btn");
+  editor.value = content.textContent || "";
+  content.style.display = "none";
+  editor.style.display = "block";
+  editBtn.style.display = "none";
+  saveBtn.style.display = "";
+  cancelBtn.style.display = "";
+  editor.focus();
+}
+
+function exitEditMode() {
+  memEditMode = false;
+  const content = document.getElementById("mem-content");
+  const editor = document.getElementById("mem-editor");
+  content.style.display = "";
+  editor.style.display = "none";
+  document.getElementById("mem-edit-btn").style.display = "";
+  document.getElementById("mem-save-btn").style.display = "none";
+  document.getElementById("mem-cancel-btn").style.display = "none";
+}
+
+document.getElementById("mem-edit-btn").addEventListener("click", enterEditMode);
+
+document.getElementById("mem-cancel-btn").addEventListener("click", () => {
+  exitEditMode();
+  document.getElementById("mem-saved").textContent = "";
+});
+
+document.getElementById("mem-save-btn").addEventListener("click", async () => {
+  const editor = document.getElementById("mem-editor");
+  const savedEl = document.getElementById("mem-saved");
+  const body = editor.value;
+  try {
+    const r = await fetch("/api/memory/" + encodeURIComponent(currentMemFile) + TOKEN, {
+      method: "PUT", body
+    });
+    if (!r.ok) throw new Error(await r.text());
+    // Update view
+    const content = document.getElementById("mem-content");
+    content.textContent = body || "";
+    if (!body) content.innerHTML = '<span class="mem-empty">(файл пуст)</span>';
+    exitEditMode();
+    savedEl.textContent = "✓ сохранено";
+    setTimeout(() => { savedEl.textContent = ""; }, 3000);
+  } catch(e) {
+    savedEl.textContent = "ошибка: " + e.message;
+    savedEl.style.color = "var(--red)";
+  }
+});
 
 // ── History ──────────────────────────────────────────────────────────────────
 let currentDay = null;

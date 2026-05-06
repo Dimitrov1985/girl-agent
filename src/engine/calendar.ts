@@ -28,7 +28,9 @@ export async function readCalendar(slug: string): Promise<CalendarEvent[]> {
 }
 
 export async function writeCalendar(slug: string, events: CalendarEvent[]): Promise<void> {
-  await fs.writeFile(calendarPath(slug), JSON.stringify(events, null, 2), "utf8");
+  const p = calendarPath(slug);
+  await fs.mkdir(path.dirname(p), { recursive: true });
+  await fs.writeFile(p, JSON.stringify(events, null, 2), "utf8");
 }
 
 export async function addCalendarEvent(slug: string, title: string, date: string, time?: string, notes?: string): Promise<CalendarEvent> {

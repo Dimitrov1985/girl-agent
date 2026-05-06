@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Runtime, RuntimeEvent } from "../engine/runtime.js";
-import { readMd, readRelationship, listSessionDays, readSessionLog, sessionDate } from "../storage/md.js";
+import { readMd, writeMd, readRelationship, listSessionDays, readSessionLog, sessionDate } from "../storage/md.js";
 import { readCalendar } from "../engine/calendar.js";
 import type { ProfileConfig } from "../types.js";
 import { getUI } from "./ui.js";
@@ -133,9 +133,28 @@ export function startWebServer(runtime: Runtime, cfg: ProfileConfig, port: numbe
 
     if (path.startsWith("/api/memory/")) {
       const file = decodeURIComponent(path.slice("/api/memory/".length));
-      const content = await readMd(cfg.slug, file).catch(() => "");
-      text(res, content);
-      return;
+
+      // GET — read file
+      if (req.method === "GET") {
+        const content = await readMd(cfg.slug, file).catch(() => "");
+        text(res, content);
+        return;
+      }
+
+      // PUT — save file
+      if (req.method === "PUT") {
+        let body = "";
+        req.on("data", (chunk: Buffer) => { body += chunk.toString(); });
+        req.on("end", async () => {
+          try {
+            await writeMd(cfg.slug, file, body);
+            json(res, { ok: true });
+          } catch (e) {
+            json(res, { error: (e as Error).message }, 500);
+          }
+        });
+        return;
+      }
     }
 
     if (path === "/api/logs") {

@@ -34,6 +34,7 @@ export interface TgAdapter {
   reportSpam?(chatId: number | string): Promise<void>;
   sendSticker?(chatId: number | string, fileId: string): Promise<void>;
   sendVoice?(chatId: number | string, audio: Buffer, filename: string): Promise<number | undefined>;
+  sendPhoto?(chatId: number | string, image: Buffer, caption?: string): Promise<number | undefined>;
   editLastMessage?(chatId: number | string, messageId: number, text: string): Promise<void>;
   deleteMessages?(chatId: number | string, messageIds: number[], revoke?: boolean): Promise<void>;
   stop(): Promise<void>;

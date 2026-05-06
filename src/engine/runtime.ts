@@ -26,6 +26,7 @@ import { addStickerToLibrary, pickSticker } from "./stickers.js";
 import { getWeatherContext } from "./weather.js";
 import { getCalendarContext, addCalendarEvent, readCalendar, removeCalendarEvent } from "./calendar.js";
 import { synthesizeSpeech, ttsFilename } from "./tts.js";
+import { generateSelfie } from "./imagegen.js";
 import { EventEmitter } from "node:events";
 
 export interface RuntimeEvent {
@@ -361,6 +362,39 @@ export class Runtime extends EventEmitter {
     }
   }
 
+  private async generateAndSendPhoto(
+    chatId: number | string,
+    hist: ConversationTurn[],
+    incomingText: string,
+    scope: RelationshipScope
+  ): Promise<void> {
+    const imageCfg = this.cfg.imagegen!;
+
+    // Генерируем короткую подпись к фото через LLM
+    const rel = await readRelationship(this.cfg.slug);
+    const captionSys = `Ты — ${this.cfg.name}. Только что отправила ему своё фото. Напиши 1 короткую подпись (1-6 слов) в своём стиле, как девушки подписывают фото в тг. Без кавычек, без описания. Иногда вообще без подписи — тогда верни пустую строку.`;
+    let caption = "";
+    try {
+      caption = sanitizeModelReply(await this.llm.chat([
+        { role: "system", content: captionSys },
+        { role: "user", content: incomingText }
+      ], { temperature: 1.0, maxTokens: 30 }));
+    } catch { /* без подписи тоже норм */ }
+
+    this.emit("event", { type: "info", text: `imagegen: генерирую selfie...` } as RuntimeEvent);
+    const image = await generateSelfie(this.cfg, imageCfg, this.dailyLife, rel.score);
+
+    const messageId = await this.tg.sendPhoto?.(chatId, image, caption || undefined);
+
+    hist.push({ role: "assistant", content: `[фото отправлено${caption ? ": " + caption : ""}]`, ts: Date.now() });
+    if (messageId) this.lastSentByChat.set(this.histKey(chatId), messageId);
+    this.lastHerReplyTs.set(this.histKey(chatId), Date.now());
+    this.emit("event", { type: "outgoing", text: `📷 ${caption || "(фото без подписи)"}`, chatId } as RuntimeEvent);
+    if (scope === "primary") {
+      await appendSessionLog(this.cfg.slug, this.cfg.tz, `  -> она [фото]: ${caption || ""}`);
+    }
+  }
+
   private async generateOutgoingMediaRefusal(kind: "photo" | "video" | "voice" | "video_note", incomingText: string, scope: RelationshipScope): Promise<string[]> {
     const realism = scope === "primary" ? await loadRealismContext(this.cfg, incomingText) : undefined;
     const sys = await buildSystemPrompt(this.cfg, {
@@ -458,6 +492,13 @@ export class Runtime extends EventEmitter {
       if (requestedMedia === "voice" && this.cfg.tts && isPrimary && this.actionAvailable("sendVoice")) {
         this.generateAndSendVoice(m.chatId, hist, incomingText, scope).catch(e =>
           this.emit("event", { type: "error", text: "tts: " + silentErrorLabel(e) } as RuntimeEvent)
+        );
+        return;
+      }
+      // Если запросили фото и imagegen настроен — генерируем и отправляем selfie
+      if (requestedMedia === "photo" && this.cfg.imagegen && isPrimary && this.actionAvailable("sendPhoto")) {
+        this.generateAndSendPhoto(m.chatId, hist, incomingText, scope).catch(e =>
+          this.emit("event", { type: "error", text: "imagegen: " + silentErrorLabel(e) } as RuntimeEvent)
         );
         return;
       }

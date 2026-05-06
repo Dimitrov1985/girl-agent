@@ -121,11 +121,14 @@ export async function generatePersonaPack(
 - days только из: mon, tue, wed, thu, fri, sat, sun.
 - Без markdown, только JSON.`;
 
-  const [persona, speech, boundaries, routineRaw] = await Promise.all([
+  const appearancePrompt = `Сгенерируй краткое описание внешности ${name}, ${age} лет (${country}) для использования в DALL-E промпте генерации фото. Пиши ТОЛЬКО на английском, только ключевые слова через запятую. Формат: "[hair description], [eye color], [face features], [skin tone], [body type], [typical clothing style]". Не более 40 слов. Без кавычек, без лишних слов. Пример: "medium brown straight hair below shoulders, green eyes, soft oval face, light skin, slim build, casual style oversized hoodies and straight jeans"`;
+
+  const [persona, speech, boundaries, routineRaw, appearance] = await Promise.all([
     llm.chat([{ role: "system", content: sys }, { role: "user", content: personaPrompt }], { temperature: 0.95, maxTokens: 3500 }),
     llm.chat([{ role: "system", content: sys }, { role: "user", content: speechPrompt }], { temperature: 0.9, maxTokens: 3500 }),
     llm.chat([{ role: "system", content: sys }, { role: "user", content: boundariesPrompt }], { temperature: 0.9, maxTokens: 3500 }),
-    llm.chat([{ role: "system", content: sys }, { role: "user", content: routinePrompt }], { temperature: 0.85, maxTokens: 3500, json: true })
+    llm.chat([{ role: "system", content: sys }, { role: "user", content: routinePrompt }], { temperature: 0.85, maxTokens: 3500, json: true }),
+    llm.chat([{ role: "system", content: sys }, { role: "user", content: appearancePrompt }], { temperature: 0.9, maxTokens: 100 })
   ]);
 
   const busySchedule = parseBusySchedule(routineRaw, name, age);
@@ -133,6 +136,7 @@ export async function generatePersonaPack(
   await writeMd(slug, "persona.md", persona);
   await writeMd(slug, "speech.md", speech);
   await writeMd(slug, "communication.md", boundaries);
+  if (appearance.trim()) await writeMd(slug, "memory/appearance.md", appearance.trim());
 
   return { persona, speech, boundaries, busySchedule };
 }

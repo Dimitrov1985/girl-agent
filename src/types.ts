@@ -116,6 +116,12 @@ export interface ProfileConfig {
   busySchedule?: BusySlot[];
   /** "open" — отвечает всем (default); "owner-only" — только владельцу */
   privacy?: "open" | "owner-only";
+  /** Генерация фото (selfie) */
+  imagegen?: {
+    provider: "dalle3" | "stability";
+    apiKey: string;
+    model?: string;
+  };
   /** TTS — синтез голосовых сообщений */
   tts?: {
     provider: "openai" | "elevenlabs";

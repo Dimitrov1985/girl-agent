@@ -50,6 +50,11 @@ export function makeBotAdapter(cfg: ProfileConfig): TgAdapter {
       const msg = await bot.api.sendVoice(chatId as number, new InputFile(audio, filename));
       return msg.message_id;
     },
+    async sendPhoto(chatId, image, caption) {
+      try { await bot.api.sendChatAction(chatId as number, "upload_photo"); } catch { /* */ }
+      const msg = await bot.api.sendPhoto(chatId as number, new InputFile(image, "photo.jpg"), caption ? { caption } : undefined);
+      return msg.message_id;
+    },
     async stop() {
       await bot.stop();
     }

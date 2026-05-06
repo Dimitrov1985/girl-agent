@@ -26,7 +26,7 @@ type Step =
   | "nationality" | "name-mode" | "name" | "name-tournament" | "name-tournament-knockout"
   | "age" | "sleep" | "sleep-custom-from" | "sleep-custom-to" | "sleep-custom-chance" | "vibe"
   | "comm-notifications" | "comm-style" | "comm-initiative" | "comm-life"
-  | "tz" | "persona-notes" | "generating" | "stage" | "privacy" | "tts-pick" | "tts-key" | "tts-voice" | "mcp-pick" | "mcp-secret" | "saving" | "done";
+  | "tz" | "persona-notes" | "generating" | "stage" | "privacy" | "tts-pick" | "tts-key" | "tts-voice" | "img-pick" | "img-key" | "mcp-pick" | "mcp-secret" | "saving" | "done";
 
 const TOURNAMENT_ROUNDS = 20;
 
@@ -101,6 +101,8 @@ export function Wizard({ initial, onDone }: {
   const [ttsProvider, setTtsProvider] = useState<"none" | "openai" | "elevenlabs">("none");
   const [ttsKey, setTtsKey] = useState(initial?.tts?.apiKey ?? "");
   const [ttsVoice, setTtsVoice] = useState(initial?.tts?.voiceId ?? "nova");
+  const [imgProvider, setImgProvider] = useState<"none" | "dalle3" | "stability">("none");
+  const [imgKey, setImgKey] = useState(initial?.imagegen?.apiKey ?? "");
 
   const [pickedMcp, setPickedMcp] = useState<string[]>(initial?.mcp?.map(m => m.id) ?? []);
   const [mcpQueue, setMcpQueue] = useState<string[]>([]);
@@ -935,7 +937,7 @@ export function Wizard({ initial, onDone }: {
             onSelect={(it) => {
               const v = it.value as "none" | "openai" | "elevenlabs";
               setTtsProvider(v);
-              if (v === "none") { setStep("mcp-pick"); }
+              if (v === "none") { setStep("img-pick"); }
               else {
                 // предзаполняем ключ из LLM если провайдер openai
                 if (v === "openai" && llmPresetId === "openai" && llmKey && !ttsKey) setTtsKey(llmKey);
@@ -957,7 +959,7 @@ export function Wizard({ initial, onDone }: {
           <TextInput value={ttsKey} onChange={setTtsKey} mask="•" onSubmit={() => {
             if (!ttsKey) { setError("введи ключ"); return; }
             setError(null);
-            setStep(ttsProvider === "openai" ? "tts-voice" : "mcp-pick");
+            setStep(ttsProvider === "openai" ? "tts-voice" : "img-pick");
           }} />
         </Box>
         {ttsProvider === "elevenlabs" && (
@@ -978,10 +980,52 @@ export function Wizard({ initial, onDone }: {
             items={OPENAI_VOICES.map(v => ({ label: v.label, value: v.id }))}
             onSelect={(it) => {
               setTtsVoice(it.value as string);
-              setStep("mcp-pick");
+              setStep("img-pick");
             }}
           />
         </Box>
+      </Box>
+    );
+  }
+
+  if (step === "img-pick") {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Header sub="генерация фото (selfie)" />
+        <Bar step={11} total={13} />
+        <Box marginTop={1}>
+          <SelectInput
+            items={[
+              { label: "Пропустить — фото не нужны", value: "none" },
+              { label: "DALL-E 3 — OpenAI, $0.04/фото, нужен OpenAI ключ", value: "dalle3" },
+              { label: "Stability AI — Stable Diffusion, нужен отдельный ключ", value: "stability" }
+            ]}
+            onSelect={(it) => {
+              const v = it.value as "none" | "dalle3" | "stability";
+              setImgProvider(v);
+              if (v === "none") { setStep("mcp-pick"); return; }
+              if (v === "dalle3" && llmPresetId === "openai" && llmKey && !imgKey) setImgKey(llmKey);
+              setStep("img-key");
+            }}
+          />
+        </Box>
+      </Box>
+    );
+  }
+
+  if (step === "img-key") {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Header sub={`${imgProvider === "dalle3" ? "OpenAI" : "Stability AI"} API ключ`} />
+        <Bar step={11} total={13} />
+        <Box marginTop={1}><Text>Key: </Text>
+          <TextInput value={imgKey} onChange={setImgKey} mask="•" onSubmit={() => {
+            if (!imgKey) { setError("введи ключ"); return; }
+            setError(null);
+            setStep("mcp-pick");
+          }} />
+        </Box>
+        {error && <Text color="red">{error}</Text>}
       </Box>
     );
   }
@@ -1090,6 +1134,9 @@ export function Wizard({ initial, onDone }: {
       privacy,
       tts: ttsProvider !== "none" && ttsKey
         ? { provider: ttsProvider, apiKey: ttsKey, voiceId: ttsVoice || "nova" }
+        : undefined,
+      imagegen: imgProvider !== "none" && imgKey
+        ? { provider: imgProvider, apiKey: imgKey }
         : undefined
     };
   }

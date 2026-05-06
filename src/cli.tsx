@@ -55,13 +55,15 @@ async function main() {
     string: [
       "profile", "mode", "token", "api-id", "api-hash", "phone", "api-preset", "base-url", "proto", "model", "api-key",
       "name", "stage", "mcp", "nationality", "tz", "vibe", "persona-notes", "communication-preset",
-      "notifications", "message-style", "initiative", "life-sharing"
+      "notifications", "message-style", "initiative", "life-sharing", "web-token"
     ],
     boolean: ["help", "list", "reset"],
     alias: { h: "help" }
   });
 
   if (argv.help) { process.stdout.write(HELP); return; }
+  const webPort = argv.web ? (typeof argv.web === "number" ? argv.web : 3000) : undefined;
+  const webToken = argv["web-token"] as string | undefined;
 
   if (argv.age != null) {
     const a = Number(argv.age);
@@ -91,7 +93,7 @@ async function main() {
       cfg.stage = "tg-given-cold";
       await writeConfig(cfg);
     }
-    await runRuntime(cfg);
+    await runRuntime(cfg, webPort, webToken);
     return;
   }
 
@@ -106,7 +108,7 @@ async function main() {
     const generated = await generatePersonaPack(llm, cfg.slug, cfg.name, cfg.age, cfg.nationality, personaNotesForGeneration(cfg));
     cfg.busySchedule = generated.busySchedule;
     await writeConfig(cfg);
-    await runRuntime(cfg);
+    await runRuntime(cfg, webPort, webToken);
     return;
   }
 
@@ -214,9 +216,14 @@ function personaNotesForGeneration(cfg: ProfileConfig): string {
   return parts.join("\n\n");
 }
 
-async function runRuntime(cfg: ProfileConfig) {
+async function runRuntime(cfg: ProfileConfig, webPort?: number, webToken?: string) {
   const rt = new Runtime(cfg);
   await rt.start();
+
+  if (webPort) {
+    const { startWebServer } = await import("./web/server.js");
+    startWebServer(rt, cfg, webPort, webToken || process.env.GIRL_AGENT_WEB_TOKEN || undefined);
+  }
 
   if (process.stdout.isTTY) {
     // Интерактивный режим — ink дашборд

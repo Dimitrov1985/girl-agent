@@ -4,11 +4,12 @@ services:
     restart: unless-stopped
     volumes:
       - ./data:/app/data
+    ports:
+      - "${GIRL_AGENT_WEB_PORT:-3000}:3000"
     environment:
-      # Имя профиля (slug). Если пусто — загружает единственный профиль автоматически.
       GIRL_AGENT_PROFILE: "${GIRL_AGENT_PROFILE:-}"
-      # Включить debug-логи telegram (1 = да)
       GIRL_AGENT_DEBUG: "${GIRL_AGENT_DEBUG:-0}"
+      GIRL_AGENT_WEB_TOKEN: "${GIRL_AGENT_WEB_TOKEN:-}"
     logging:
       driver: "json-file"
       options:

@@ -19,6 +19,7 @@
     "dev": "tsx src/cli.tsx",
     "start": "node dist/cli.js",
     "typecheck": "tsc --noEmit",
+    "test": "node --import tsx/esm --no-warnings --test src/__tests__/conflict.test.ts src/__tests__/reflect.test.ts src/__tests__/storage.test.ts src/__tests__/presence.test.ts src/__tests__/calendar.test.ts",
     "prepublishOnly": "npm run build"
   },
   "author": "TheSashaDev (void)",

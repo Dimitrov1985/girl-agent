@@ -1290,6 +1290,75 @@ export class Runtime extends EventEmitter {
     }
   }
 
+  async cmdEdit(sub?: string, ...args: string[]): Promise<string> {
+    const text = args.join(" ").trim();
+
+    // :edit vibe <preset> — мгновенно, без LLM
+    if (sub === "vibe") {
+      const { findCommunicationPreset, normalizeCommunicationProfile } = await import("../presets/communication.js");
+      const preset = findCommunicationPreset(text);
+      if (!preset) return `неизвестный пресет. доступные: normal, cute, alt, clingy, chatty`;
+      this.cfg.communication = preset.profile;
+      this.cfg.vibe = text === "alt" ? "short" : "warm";
+      await writeConfig(this.cfg);
+      return `vibe → ${preset.label} (${preset.description})`;
+    }
+
+    // :edit stage <id> — алиас
+    if (sub === "stage") return this.cmdSetStage(text);
+
+    // :edit persona <инструкции> — патч существующей persona.md
+    if (sub === "persona") {
+      const existing = await readMd(this.cfg.slug, "persona.md");
+      if (!existing.trim()) return "persona.md пуст — создай профиль через wizard";
+      if (!text) return "укажи что изменить. Пример: :edit persona больше сарказма, увлекается музыкой";
+      this.emit("event", { type: "info", text: "edit: обновляю persona.md..." } as RuntimeEvent);
+      const updated = await this.llm.chat([
+        {
+          role: "system",
+          content: `Ты — редактор персонажей. Обновляй профиль точечно: вноси ТОЛЬКО те изменения, которые запросил пользователь, сохраняя всё остальное. Не переписывай полностью, не добавляй новые разделы которых нет в оригинале. Верни ПОЛНЫЙ обновлённый persona.md в той же структуре.`
+        },
+        {
+          role: "user",
+          content: `ТЕКУЩИЙ persona.md:\n${existing}\n\nЧТО ИЗМЕНИТЬ:\n${text}\n\nВерни полный обновлённый persona.md.`
+        }
+      ], { temperature: 0.8, maxTokens: 3500 });
+      if (!updated.trim()) return "LLM вернул пустой ответ";
+      await writeMd(this.cfg.slug, "persona.md", updated.trim());
+      if (text) { this.cfg.personaNotes = (this.cfg.personaNotes ? this.cfg.personaNotes + "; " : "") + text; await writeConfig(this.cfg); }
+      return `persona.md обновлён. Изменения вступят в силу с следующего сообщения.`;
+    }
+
+    // :edit speech [инструкции] — перегенерация speech.md
+    if (sub === "speech") {
+      const persona = await readMd(this.cfg.slug, "persona.md");
+      if (!persona.trim()) return "persona.md пуст — создай профиль через wizard";
+      this.emit("event", { type: "info", text: "edit: обновляю speech.md..." } as RuntimeEvent);
+      const existing = await readMd(this.cfg.slug, "speech.md");
+      const prompt = text
+        ? `ТЕКУЩИЙ speech.md:\n${existing}\n\nЧТО ИЗМЕНИТЬ:\n${text}\n\nВерни полный обновлённый speech.md.`
+        : `PERSONA:\n${persona.slice(0, 1500)}\n\nПерегенерируй speech.md в том же формате, более точно отражая характер персонажа.`;
+      const updated = await this.llm.chat([
+        { role: "system", content: `Ты — лингвист, описывающий манеру переписки персонажа. Пиши как заметка, не как реклама. Актуально на ${new Date().getFullYear()} год, Telegram, Россия/СНГ.` },
+        { role: "user", content: prompt }
+      ], { temperature: 0.85, maxTokens: 3500 });
+      if (!updated.trim()) return "LLM вернул пустой ответ";
+      await writeMd(this.cfg.slug, "speech.md", updated.trim());
+      return `speech.md обновлён. Изменения вступят в силу с следующего сообщения.`;
+    }
+
+    // :edit appearance [описание] — обновить внешность
+    if (sub === "appearance") {
+      if (text) {
+        await writeMd(this.cfg.slug, "memory/appearance.md", text);
+        return `appearance.md обновлён вручную:\n${text}\n\nТест: :appearance preview`;
+      }
+      return this.cmdAppearance();
+    }
+
+    return `usage:\n  :edit persona <что изменить>\n  :edit speech [что изменить]\n  :edit vibe normal|cute|alt|clingy|chatty\n  :edit stage <id>\n  :edit appearance [описание на английском]`;
+  }
+
   async cmdAppearance(sub?: string): Promise<string> {
     if (sub === "show") {
       const appearance = await readMd(this.cfg.slug, "memory/appearance.md");

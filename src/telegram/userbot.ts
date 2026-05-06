@@ -109,6 +109,21 @@ export function makeUserbotAdapter(cfg: ProfileConfig): TgAdapter {
       const peer = await resolvePeer(chatId);
       await client.sendFile(peer, { file: fileId });
     },
+    async sendVoice(chatId, audio, filename) {
+      const peer = await resolvePeer(chatId);
+      try {
+        await client.invoke(new Api.messages.SetTyping({
+          peer,
+          action: new Api.SendMessageRecordAudioAction()
+        }));
+      } catch { /* */ }
+      const msg = await client.sendFile(peer, {
+        file: audio,
+        attributes: [new Api.DocumentAttributeAudio({ voice: true, duration: 0 })],
+        forceDocument: false
+      } as any);
+      return Number((msg as any).id ?? 0) || undefined;
+    },
     async setTyping(chatId, on) {
       if (!on) return;
       try {

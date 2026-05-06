@@ -6,6 +6,7 @@ import Spinner from "ink-spinner";
 import Gradient from "ink-gradient";
 import BigText from "ink-big-text";
 import { LLM_PRESETS, findPreset } from "../presets/llm.js";
+import { OPENAI_VOICES } from "../engine/tts.js";
 import { MCP_PRESETS } from "../presets/mcp.js";
 import { STAGE_PRESETS } from "../presets/stages.js";
 import { COMMUNICATION_PRESETS, communicationProfileLabel, deriveLegacyVibe, findCommunicationPreset, normalizeCommunicationProfile } from "../presets/communication.js";
@@ -25,7 +26,7 @@ type Step =
   | "nationality" | "name-mode" | "name" | "name-tournament" | "name-tournament-knockout"
   | "age" | "sleep" | "sleep-custom-from" | "sleep-custom-to" | "sleep-custom-chance" | "vibe"
   | "comm-notifications" | "comm-style" | "comm-initiative" | "comm-life"
-  | "tz" | "persona-notes" | "generating" | "stage" | "privacy" | "mcp-pick" | "mcp-secret" | "saving" | "done";
+  | "tz" | "persona-notes" | "generating" | "stage" | "privacy" | "tts-pick" | "tts-key" | "tts-voice" | "mcp-pick" | "mcp-secret" | "saving" | "done";
 
 const TOURNAMENT_ROUNDS = 20;
 
@@ -97,6 +98,9 @@ export function Wizard({ initial, onDone }: {
 
   const [stage, setStage] = useState<StageId>(initial?.stage ?? "tg-given-cold");
   const [privacy, setPrivacy] = useState<"open" | "owner-only">(initial?.privacy ?? "open");
+  const [ttsProvider, setTtsProvider] = useState<"none" | "openai" | "elevenlabs">("none");
+  const [ttsKey, setTtsKey] = useState(initial?.tts?.apiKey ?? "");
+  const [ttsVoice, setTtsVoice] = useState(initial?.tts?.voiceId ?? "nova");
 
   const [pickedMcp, setPickedMcp] = useState<string[]>(initial?.mcp?.map(m => m.id) ?? []);
   const [mcpQueue, setMcpQueue] = useState<string[]>([]);
@@ -908,6 +912,72 @@ export function Wizard({ initial, onDone }: {
             ]}
             onSelect={(it) => {
               setPrivacy(it.value as "open" | "owner-only");
+              setStep("tts-pick");
+            }}
+          />
+        </Box>
+      </Box>
+    );
+  }
+
+  if (step === "tts-pick") {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Header sub="голосовые сообщения (TTS)" />
+        <Bar step={10} total={13} />
+        <Box marginTop={1}>
+          <SelectInput
+            items={[
+              { label: "Пропустить — голосовые не нужны", value: "none" },
+              { label: "OpenAI TTS — tts-1, голос nova/shimmer (нужен OpenAI ключ)", value: "openai" },
+              { label: "ElevenLabs — лучшее качество, нужен отдельный ключ", value: "elevenlabs" }
+            ]}
+            onSelect={(it) => {
+              const v = it.value as "none" | "openai" | "elevenlabs";
+              setTtsProvider(v);
+              if (v === "none") { setStep("mcp-pick"); }
+              else {
+                // предзаполняем ключ из LLM если провайдер openai
+                if (v === "openai" && llmPresetId === "openai" && llmKey && !ttsKey) setTtsKey(llmKey);
+                setStep("tts-key");
+              }
+            }}
+          />
+        </Box>
+      </Box>
+    );
+  }
+
+  if (step === "tts-key") {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Header sub={`${ttsProvider === "openai" ? "OpenAI" : "ElevenLabs"} API ключ`} />
+        <Bar step={10} total={13} />
+        <Box marginTop={1}><Text>Key: </Text>
+          <TextInput value={ttsKey} onChange={setTtsKey} mask="•" onSubmit={() => {
+            if (!ttsKey) { setError("введи ключ"); return; }
+            setError(null);
+            setStep(ttsProvider === "openai" ? "tts-voice" : "mcp-pick");
+          }} />
+        </Box>
+        {ttsProvider === "elevenlabs" && (
+          <Text dimColor>ElevenLabs voice ID задаётся после через :tts-voice в дашборде. По умолчанию будет первый голос аккаунта.</Text>
+        )}
+        {error && <Text color="red">{error}</Text>}
+      </Box>
+    );
+  }
+
+  if (step === "tts-voice") {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Header sub="выбери голос" />
+        <Bar step={10} total={13} />
+        <Box marginTop={1}>
+          <SelectInput
+            items={OPENAI_VOICES.map(v => ({ label: v.label, value: v.id }))}
+            onSelect={(it) => {
+              setTtsVoice(it.value as string);
               setStep("mcp-pick");
             }}
           />
@@ -1017,7 +1087,10 @@ export function Wizard({ initial, onDone }: {
       communication: communicationProfile,
       personaNotes: personaNotes.trim() || undefined,
       busySchedule: overrides.busySchedule ?? busySchedule,
-      privacy
+      privacy,
+      tts: ttsProvider !== "none" && ttsKey
+        ? { provider: ttsProvider, apiKey: ttsKey, voiceId: ttsVoice || "nova" }
+        : undefined
     };
   }
 

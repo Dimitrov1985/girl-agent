@@ -116,6 +116,14 @@ export interface ProfileConfig {
   busySchedule?: BusySlot[];
   /** "open" — отвечает всем (default); "owner-only" — только владельцу */
   privacy?: "open" | "owner-only";
+  /** TTS — синтез голосовых сообщений */
+  tts?: {
+    provider: "openai" | "elevenlabs";
+    apiKey: string;
+    voiceId: string;
+    model?: string;
+    speed?: number;
+  };
 }
 
 export interface RelationshipScore {

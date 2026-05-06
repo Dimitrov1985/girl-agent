@@ -1,4 +1,4 @@
-import { Bot } from "grammy";
+import { Bot, InputFile } from "grammy";
 import type { ProfileConfig } from "../types.js";
 import type { IncomingMedia, IncomingMessage, TgAdapter } from "./index.js";
 
@@ -44,6 +44,11 @@ export function makeBotAdapter(cfg: ProfileConfig): TgAdapter {
     },
     async sendSticker(chatId, fileId) {
       await bot.api.sendSticker(chatId as number, fileId);
+    },
+    async sendVoice(chatId, audio, filename) {
+      try { await bot.api.sendChatAction(chatId as number, "record_voice"); } catch { /* */ }
+      const msg = await bot.api.sendVoice(chatId as number, new InputFile(audio, filename));
+      return msg.message_id;
     },
     async stop() {
       await bot.stop();

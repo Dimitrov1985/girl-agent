@@ -1,7 +1,7 @@
 import type { ProfileConfig, StageId } from "../types.js";
 import { makeLLM, type ChatMessage, type LLMClient } from "../llm/index.js";
 import { makeTgAdapter, type TgAdapter, type IncomingMessage } from "../telegram/index.js";
-import { buildSystemPrompt, type ConversationTurn, type RelationshipScope } from "./prompt.js";
+import { buildSystemPrompt, buildHistory, type ConversationTurn, type RelationshipScope } from "./prompt.js";
 import { behaviorTick } from "./behavior-tick.js";
 import { applyMoodDelta, maybeReflect } from "./reflect.js";
 import {
@@ -25,6 +25,7 @@ import { looksLikeJailbreak, sanitizeModelReply, silentErrorLabel } from "./secu
 import { addStickerToLibrary, pickSticker } from "./stickers.js";
 import { getWeatherContext } from "./weather.js";
 import { getCalendarContext, addCalendarEvent, readCalendar, removeCalendarEvent } from "./calendar.js";
+import { synthesizeSpeech, ttsFilename } from "./tts.js";
 import { EventEmitter } from "node:events";
 
 export interface RuntimeEvent {
@@ -301,6 +302,65 @@ export class Runtime extends EventEmitter {
     return bubbles.length ? bubbles : [];
   }
 
+  private async generateAndSendVoice(
+    chatId: number | string,
+    hist: ConversationTurn[],
+    incomingText: string,
+    scope: RelationshipScope
+  ): Promise<void> {
+    const tts = this.cfg.tts!;
+    const realism = scope === "primary" ? await loadRealismContext(this.cfg, incomingText) : undefined;
+    const conflict = scope === "primary" ? await readConflict(this.cfg.slug) : undefined;
+    const [weather, calendarCtx] = scope === "primary"
+      ? await Promise.all([
+          getWeatherContext(this.cfg.tz).catch(() => ""),
+          getCalendarContext(this.cfg.slug, this.cfg.tz).catch(() => "")
+        ])
+      : ["", ""];
+    const sys = await buildSystemPrompt(this.cfg, {
+      dailyLife: this.dailyLife,
+      conflict,
+      incoming: incomingText,
+      relationshipScope: scope,
+      committedPrimary: this.primaryIsCommitted(),
+      realism,
+      weather,
+      calendarContext: calendarCtx
+    });
+
+    const voiceInstructions = `\n\n# РЕЖИМ ГОЛОСОВОГО СООБЩЕНИЯ
+Ты отвечаешь ГОЛОСОВЫМ СООБЩЕНИЕМ — реальной речью, не текстом.
+- Говори естественно, как живой человек. Не "пишешь", а ГОВОРИШЬ.
+- Короткое голосовое — 1-3 предложения максимум (10-20 секунд).
+- Никаких разделителей "---", никакого markdown.
+- Убери знаки препинания которые странно звучат в речи. Многоточие — можно (пауза).
+- Можешь начать с "ну..." / "слушай..." / "[вздох]" — звучит живо.
+- ТОЛЬКО текст речи. Никаких описаний действий типа "[смеётся]".`;
+
+    const spokenText = sanitizeModelReply(await this.llm.chat([
+      { role: "system", content: sys + voiceInstructions },
+      ...buildHistory(hist, 12),
+      { role: "user", content: incomingText }
+    ], { temperature: 0.9, maxTokens: 200 }));
+
+    if (!spokenText.trim()) return;
+
+    this.emit("event", { type: "info", text: `tts: синтез "${spokenText.slice(0, 60)}..."` } as RuntimeEvent);
+
+    const audio = await synthesizeSpeech(spokenText, tts);
+    const filename = ttsFilename(tts);
+    const messageId = await this.tg.sendVoice?.(chatId, audio, filename);
+
+    hist.push({ role: "assistant", content: `[голосовое: ${spokenText}]`, ts: Date.now() });
+    if (messageId) this.lastSentByChat.set(this.histKey(chatId), messageId);
+    this.lastHerReplyTs.set(this.histKey(chatId), Date.now());
+    this.emit("event", { type: "outgoing", text: `🎤 ${spokenText}`, chatId } as RuntimeEvent);
+    if (scope === "primary") {
+      await appendSessionLog(this.cfg.slug, this.cfg.tz, `  -> она [голосовое]: ${spokenText}`);
+      recordInteractionMemory(this.llm, this.cfg, incomingText, spokenText).catch(() => {});
+    }
+  }
+
   private async generateOutgoingMediaRefusal(kind: "photo" | "video" | "voice" | "video_note", incomingText: string, scope: RelationshipScope): Promise<string[]> {
     const realism = scope === "primary" ? await loadRealismContext(this.cfg, incomingText) : undefined;
     const sys = await buildSystemPrompt(this.cfg, {
@@ -394,6 +454,13 @@ export class Runtime extends EventEmitter {
     const requestedMedia = this.requestedOutgoingMedia(m.text);
     if (requestedMedia) {
       const scope = isPrimary ? "primary" : "acquaintance";
+      // Если запросили голосовое и TTS настроен — генерируем и отправляем голос
+      if (requestedMedia === "voice" && this.cfg.tts && isPrimary && this.actionAvailable("sendVoice")) {
+        this.generateAndSendVoice(m.chatId, hist, incomingText, scope).catch(e =>
+          this.emit("event", { type: "error", text: "tts: " + silentErrorLabel(e) } as RuntimeEvent)
+        );
+        return;
+      }
       let bubbles: string[] = [];
       try {
         bubbles = await this.generateOutgoingMediaRefusal(requestedMedia, incomingText, scope);

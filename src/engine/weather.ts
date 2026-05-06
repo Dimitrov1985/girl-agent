@@ -4,6 +4,14 @@
 interface Coords { lat: number; lon: number; }
 
 const TZ_COORDS: Record<string, Coords> = {
+  "America/New_York":    { lat: 40.71, lon: -74.01 },
+  "America/Chicago":     { lat: 41.88, lon: -87.63 },
+  "America/Denver":      { lat: 39.74, lon: -104.98 },
+  "America/Los_Angeles": { lat: 34.05, lon: -118.24 },
+  "America/Toronto":     { lat: 43.65, lon: -79.38 },
+  "Europe/London":       { lat: 51.51, lon: -0.13 },
+  "Australia/Sydney":    { lat: -33.87, lon: 151.21 },
+  "Australia/Perth":     { lat: -31.95, lon: 115.86 },
   "Europe/Kaliningrad":   { lat: 54.71, lon: 20.51 },
   "Europe/Moscow":        { lat: 55.75, lon: 37.62 },
   "Europe/Samara":        { lat: 53.20, lon: 50.15 },

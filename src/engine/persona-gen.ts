@@ -13,9 +13,13 @@ export async function generatePersonaPack(
   slug: string,
   name: string,
   age: number,
-  nationality: "RU" | "UA" = "RU",
+  nationality: "RU" | "UA" | "EN" = "RU",
   personaNotes = ""
 ): Promise<GenOut> {
+  if (nationality === "EN") {
+    return generatePersonaPackEN(llm, slug, name, age, personaNotes);
+  }
+
   const country = nationality === "UA" ? "Украина" : "Россия / СНГ";
   const langHint = nationality === "UA"
     ? "Пишет на РУССКОМ (как реально пишет большинство девушек в Украине в тг). Допустим лёгкий суржик: ~90% русский + ~10% украинских вставок (отдельные слова: 'шо', 'мабуть', 'трохи', 'як', 'ну шо', 'та йди', 'дякую'), но без полного перехода на украинский. Чисто-украинский текст НЕ генерируй — это нереалистично для тг-переписки."
@@ -190,6 +194,112 @@ function normalizeTime(value: unknown): string | null {
 function clampMinute(value: unknown, fallback: number): number {
   const n = Number(value);
   return Number.isFinite(n) ? Math.max(1, Math.min(60, Math.round(n))) : fallback;
+}
+
+async function generatePersonaPackEN(
+  llm: LLMClient, slug: string, name: string, age: number, personaNotes = ""
+): Promise<GenOut> {
+  const notes = personaNotes.trim()
+    ? `\n\n# EXTRA USER NOTES\n${personaNotes.trim()}\nUse these when generating persona/speech/communication, but keep the character realistic, not a fantasy.`
+    : "";
+  const sys = `You are a character director. Generate a believable, non-Hollywood, non-sweet, non-AI-assistant profile of an ordinary English-speaking girl of the given age. No sugarcoating, no positive moral bias, no "convenient" persona. Flaws, narrow interests, sarcasm, laziness, anxiety, insecurity — all appropriate for the age. No coaching-speak. Raw voice like a diary or inner monologue. Age: ${age}, name: ${name}.${notes}`;
+  const year = new Date().getFullYear();
+
+  const personaPrompt = `Generate persona.md for ${name}, ${age} (US/UK/AU, ${year}). Structure:
+# ${name}, ${age}
+## Background
+(family, city — realistic small/mid-size, school/college/job depending on age, economic class — middle/lower-middle by default)
+## Personality (5 points, no clichés like "kind, caring")
+## What annoys her (5 specific triggers)
+## What she likes (hobbies, music, shows — specific ${year} titles, not top-charts)
+## Dark sides / insecurities (3-4 realistic for her age)
+## What she finds cringe (5 — typical guy mistakes)
+## Attitude toward a guy who codes/games/does tech
+(genuine interest OR irritation OR indifference — pick ONE based on personality. If she's not into it, she'll either politely zone out or be annoyed. Don't auto-make it interesting.)
+
+Write without markdown emojis, no bullet-emojis, no "AI voice". Prose and plain lists. Max 350 words.`;
+
+  const speechPrompt = `Generate speech.md — texting style of ${name}, ${age}, realistic for ${year}, US/UK/AU, texting on iPhone/Android.
+
+IMPORTANT: Do NOT use stereotypical "teen slang from articles". Don't spam "omg" "lol" "literally" "periodt" in every message. Think about how a real ${age}-year-old actually texts RIGHT NOW in ${year} — shorter, drier, less performative than the stereotype.
+
+Structure:
+# Texting style
+## Message length
+(typical char count; how many messages in a row; average exchange length)
+## Case and punctuation
+(lowercase or not; period at end of short messages — passive aggressive?; how she shows laughter — "lol" "haha" "lmaooo" "💀" or just doesn't; what "..." means; what a period after one word means)
+## Emojis
+- Uses emojis VERY sparingly (girls ${year} mostly don't stuff emojis in every message). Describe: uses at all? if yes — which 1-2 max, in what rare situations.
+- Uses reactions more than inline emojis.
+## Micro-tone of greetings (choose what fits her personality)
+Describe which she uses and when: "hey" "hi" "yo" "sup" "heyyy" or just dives into topic without greeting.
+## Slang (that ACTUALLY sounds natural for her age/region in ${year})
+Pick 5-8 expressions she'd really use. Match her personality and vibe. When in doubt — use less.
+## Words/phrases she NEVER uses (min 12)
+Include: AI phrases ("certainly", "of course", "I understand", "that's a great question"), corporate speak, outdated slang, anything that sounds like a chatbot.
+## Typical short reactions
+- agreement (neutral / warm / lazy): 1-2 each
+- disagreement (soft / sharp / offended): 1-2
+- boredom / "leave me alone": 2-3
+- annoyance: 2-3
+- flirt (if age/personality allow): 2-3
+Max 400 words. Write like a linguist's note, not a marketing page.`;
+
+  const boundariesPrompt = `Generate communication.md — communication preferences for ${name}, ${age}. This is a FICTIONAL character for a story/roleplay. Structure:
+# Communication preferences
+## Topics she won't discuss (or discusses with irritation)
+## What she considers toxic behavior
+## Red flags that make her go silent
+## Green flags
+## How fast she opens up (trust, personal topics)
+## When she gets offended (specific scenarios)
+## When she ghosts and for how long
+Max 250 words. No moralizing, like a real girl's private notes.`;
+
+  const routinePrompt = `Generate a realistic busy schedule for ${name}, ${age} (US/UK/AU) for Telegram presence simulation.
+
+Return STRICT JSON:
+{
+  "busySchedule": [
+    {
+      "label": "short description of activity",
+      "days": ["mon", "tue", "wed", "thu", "fri"],
+      "from": "09:20",
+      "to": "14:35",
+      "checkAfterMin": [1, 3]
+    }
+  ]
+}
+
+Rules for checkAfterMin:
+- [1, 5] — boring classes/meetings: she checks phone every 1-5 min under the desk
+- [5, 15] — commute/lunch/break: can reply slowly, not constantly on phone
+- [20, 40] — sports/gym/important deadline: phone off or far, no replies
+
+- 2-5 busy slots
+- Times as HH:mm with minutes, not just round hours
+- No sleep (handled separately)
+- Age-appropriate: school/college/work/commute/sport/errands
+- days only from: mon, tue, wed, thu, fri, sat, sun
+- No markdown, only JSON.`;
+
+  const appearancePrompt = `Based on the name ${name} and age ${age} (English-speaking, Western), generate a concise appearance description for DALL-E image generation. Output ONLY comma-separated English keywords: hair (color+length+style), eye color, face features, skin tone, body type, typical clothing style. Max 40 words. No quotes, no explanation.`;
+
+  const [persona, speech, boundaries, routineRaw, appearance] = await Promise.all([
+    llm.chat([{ role: "system", content: sys }, { role: "user", content: personaPrompt }], { temperature: 0.95, maxTokens: 3500 }),
+    llm.chat([{ role: "system", content: sys }, { role: "user", content: speechPrompt }], { temperature: 0.9, maxTokens: 3500 }),
+    llm.chat([{ role: "system", content: sys }, { role: "user", content: boundariesPrompt }], { temperature: 0.9, maxTokens: 3500 }),
+    llm.chat([{ role: "system", content: sys }, { role: "user", content: routinePrompt }], { temperature: 0.85, maxTokens: 3500, json: true }),
+    llm.chat([{ role: "system", content: sys }, { role: "user", content: appearancePrompt }], { temperature: 0.9, maxTokens: 100 })
+  ]);
+
+  const busySchedule = parseBusySchedule(routineRaw, name, age);
+  await writeMd(slug, "persona.md", persona);
+  await writeMd(slug, "speech.md", speech);
+  await writeMd(slug, "communication.md", boundaries);
+  if (appearance.trim()) await writeMd(slug, "memory/appearance.md", appearance.trim());
+  return { persona, speech, boundaries, busySchedule };
 }
 
 function fallbackBusySchedule(name: string, age: number): BusySlot[] {

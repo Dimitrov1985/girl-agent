@@ -57,8 +57,19 @@ export const NAMES_UA: string[] = [
   "Яна", "Ярина", "Ярослава"
 ];
 
-export function pickRandomNames(nat: "RU" | "UA", count: number, exclude: Set<string> = new Set()): string[] {
-  const pool = (nat === "UA" ? NAMES_UA : NAMES_RU).filter(n => !exclude.has(n));
+export const NAMES_EN: string[] = [
+  "Emma", "Olivia", "Ava", "Sophia", "Isabella", "Mia", "Charlotte", "Amelia",
+  "Harper", "Evelyn", "Abigail", "Emily", "Ella", "Madison", "Scarlett",
+  "Grace", "Chloe", "Riley", "Zoey", "Nora", "Lily", "Eleanor", "Hannah",
+  "Lillian", "Addison", "Aubrey", "Ellie", "Stella", "Natalie", "Zoe",
+  "Leah", "Hazel", "Violet", "Aurora", "Savannah", "Audrey", "Brooklyn",
+  "Bella", "Claire", "Skylar", "Lucy", "Paisley", "Everly", "Anna", "Caroline",
+  "Nova", "Genesis", "Emilia", "Kennedy", "Maya", "Quinn", "Kinsley", "Alexa",
+  "Arianna", "Aaliyah", "Jade", "Kylie", "Piper", "Rachel", "Molly"
+];
+
+export function pickRandomNames(nat: "RU" | "UA" | "EN", count: number, exclude: Set<string> = new Set()): string[] {
+  const pool = (nat === "UA" ? NAMES_UA : nat === "EN" ? NAMES_EN : NAMES_RU).filter(n => !exclude.has(n));
   const out: string[] = [];
   const used = new Set<string>();
   while (out.length < Math.min(count, pool.length)) {

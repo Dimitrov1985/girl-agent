@@ -31,7 +31,17 @@ export const TIMEZONES: TzEntry[] = [
   { iana: "Asia/Bishkek", gmtWinter: "GMT+6", city: "Бишкек", country: "Кыргызстан", aliases: ["бишкек", "bishkek", "kg"] },
   { iana: "Asia/Tbilisi", gmtWinter: "GMT+4", city: "Тбилиси", country: "Грузия", aliases: ["тбилиси", "tbilisi", "ge", "грузия"] },
   { iana: "Asia/Yerevan", gmtWinter: "GMT+4", city: "Ереван", country: "Армения", aliases: ["ереван", "yerevan", "am", "армения"] },
-  { iana: "Asia/Baku", gmtWinter: "GMT+4", city: "Баку", country: "Азербайджан", aliases: ["баку", "baku", "az", "азербайджан"] }
+  { iana: "Asia/Baku", gmtWinter: "GMT+4", city: "Баку", country: "Азербайджан", aliases: ["баку", "baku", "az", "азербайджан"] },
+
+  // English-speaking
+  { iana: "America/New_York",    gmtWinter: "GMT-5",  city: "New York",    country: "USA",       aliases: ["new york", "nyc", "ny", "eastern", "us", "usa", "america", "boston", "miami", "atlanta"] },
+  { iana: "America/Chicago",     gmtWinter: "GMT-6",  city: "Chicago",     country: "USA",       aliases: ["chicago", "central", "dallas", "houston", "minneapolis"] },
+  { iana: "America/Denver",      gmtWinter: "GMT-7",  city: "Denver",      country: "USA",       aliases: ["denver", "mountain", "phoenix", "salt lake"] },
+  { iana: "America/Los_Angeles", gmtWinter: "GMT-8",  city: "Los Angeles", country: "USA",       aliases: ["los angeles", "la", "pacific", "san francisco", "seattle", "portland", "las vegas"] },
+  { iana: "America/Toronto",     gmtWinter: "GMT-5",  city: "Toronto",     country: "Canada",    aliases: ["toronto", "canada", "ca", "montreal", "ottawa", "vancouver"] },
+  { iana: "Europe/London",       gmtWinter: "GMT+0",  city: "London",      country: "UK",        aliases: ["london", "uk", "england", "britain", "manchester", "birmingham", "gb"] },
+  { iana: "Australia/Sydney",    gmtWinter: "GMT+11", city: "Sydney",      country: "Australia", aliases: ["sydney", "australia", "au", "melbourne", "brisbane", "aest"] },
+  { iana: "Australia/Perth",     gmtWinter: "GMT+8",  city: "Perth",       country: "Australia", aliases: ["perth", "awst"] }
 ];
 
 export function findTzByQuery(q: string, limit = 8): TzEntry[] {
@@ -68,6 +78,8 @@ export function parseTzFlag(value: string): string | undefined {
   return findTzByQuery(v, 1)[0]?.iana;
 }
 
-export function defaultTzForNationality(nat: "RU" | "UA"): string {
-  return nat === "UA" ? "Europe/Kyiv" : "Europe/Moscow";
+export function defaultTzForNationality(nat: "RU" | "UA" | "EN"): string {
+  if (nat === "UA") return "Europe/Kyiv";
+  if (nat === "EN") return "America/New_York";
+  return "Europe/Moscow";
 }

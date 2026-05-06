@@ -2,7 +2,7 @@ export type ClientMode = "bot" | "userbot";
 
 export type LLMProto = "openai" | "anthropic";
 
-export type Nationality = "RU" | "UA";
+export type Nationality = "RU" | "UA" | "EN";
 
 export interface LLMPreset {
   id: string;

@@ -439,7 +439,8 @@ export function Wizard({ initial, onDone }: {
           <SelectInput
             items={[
               { label: "🇷🇺 Россия / СНГ — русский", value: "RU" },
-              { label: "🇺🇦 Украина — русский + лёгкий суржик (10%)", value: "UA" }
+              { label: "🇺🇦 Украина — русский + лёгкий суржик (10%)", value: "UA" },
+              { label: "🇺🇸 US / UK / AU — English", value: "EN" }
             ]}
             onSelect={(it) => {
               setNationality(it.value as Nationality);

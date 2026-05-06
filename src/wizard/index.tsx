@@ -25,7 +25,7 @@ type Step =
   | "nationality" | "name-mode" | "name" | "name-tournament" | "name-tournament-knockout"
   | "age" | "sleep" | "sleep-custom-from" | "sleep-custom-to" | "sleep-custom-chance" | "vibe"
   | "comm-notifications" | "comm-style" | "comm-initiative" | "comm-life"
-  | "tz" | "persona-notes" | "generating" | "stage" | "mcp-pick" | "mcp-secret" | "saving" | "done";
+  | "tz" | "persona-notes" | "generating" | "stage" | "privacy" | "mcp-pick" | "mcp-secret" | "saving" | "done";
 
 const TOURNAMENT_ROUNDS = 20;
 
@@ -96,6 +96,7 @@ export function Wizard({ initial, onDone }: {
   const [communicationProfile, setCommunicationProfile] = useState<CommunicationProfile>(normalizeCommunicationProfile(initial));
 
   const [stage, setStage] = useState<StageId>(initial?.stage ?? "tg-given-cold");
+  const [privacy, setPrivacy] = useState<"open" | "owner-only">(initial?.privacy ?? "open");
 
   const [pickedMcp, setPickedMcp] = useState<string[]>(initial?.mcp?.map(m => m.id) ?? []);
   const [mcpQueue, setMcpQueue] = useState<string[]>([]);
@@ -409,13 +410,16 @@ export function Wizard({ initial, onDone }: {
   }
 
   if (step === "api-key") {
+    const isCustomPreset = llmPresetId === "custom-openai" || llmPresetId === "custom-anthropic";
     return (
       <Box flexDirection="column" padding={1}>
         <Header sub="API ключ" />
         <Bar step={2} total={11} />
         <Box marginTop={1}><Text>Key: </Text>
-          <TextInput value={llmKey} onChange={setLlmKey} mask="•" onSubmit={() => llmKey && setStep("nationality")} />
+          <TextInput value={llmKey} onChange={setLlmKey} mask="•" onSubmit={() => (llmKey || isCustomPreset) && setStep("nationality")} />
         </Box>
+        {isCustomPreset && <Text dimColor>для локальных моделей (LMStudio, Ollama) ключ можно оставить пустым — Enter пропустит</Text>}
+        {error && <Text color="red">{error}</Text>}
       </Box>
     );
   }
@@ -883,6 +887,27 @@ export function Wizard({ initial, onDone }: {
               const nextStage = it.value as StageId;
               setStage(nextStage);
               await writeConfig(makeConfig({ stage: nextStage }));
+              setStep("privacy");
+            }}
+          />
+        </Box>
+      </Box>
+    );
+  }
+
+  if (step === "privacy") {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Header sub="настройки приватности" />
+        <Bar step={9} total={13} />
+        <Box marginTop={1}>
+          <SelectInput
+            items={[
+              { label: "open — отвечает всем кто напишет (как обычный тг-аккаунт)", value: "open" },
+              { label: "owner-only — только для тебя, всех остальных игнорирует", value: "owner-only" }
+            ]}
+            onSelect={(it) => {
+              setPrivacy(it.value as "open" | "owner-only");
               setStep("mcp-pick");
             }}
           />
@@ -991,7 +1016,8 @@ export function Wizard({ initial, onDone }: {
       vibe: deriveLegacyVibe(communicationProfile),
       communication: communicationProfile,
       personaNotes: personaNotes.trim() || undefined,
-      busySchedule: overrides.busySchedule ?? busySchedule
+      busySchedule: overrides.busySchedule ?? busySchedule,
+      privacy
     };
   }
 

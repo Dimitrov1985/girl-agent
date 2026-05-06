@@ -254,7 +254,17 @@ export function parseSessionLogTurns(raw: string, fromId?: number, limit = 30): 
 export async function readRecentSessionTurns(slug: string, tz: string, fromId?: number, limit = 30): Promise<StoredConversationTurn[]> {
   const day = sessionDate(tz);
   const raw = await readSessionLog(slug, day);
-  return parseSessionLogTurns(raw, fromId, limit);
+  const turns = parseSessionLogTurns(raw, fromId, limit);
+  // Если сегодня ещё нет сообщений — берём хвост вчерашнего лога для контекста
+  if (turns.length === 0) {
+    const days = await listSessionDays(slug);
+    const prev = days.filter(d => d < day).at(-1);
+    if (prev) {
+      const prevRaw = await readSessionLog(slug, prev);
+      return parseSessionLogTurns(prevRaw, fromId, Math.min(limit, 15));
+    }
+  }
+  return turns;
 }
 
 // ===== Agenda (proactive scheduler) =====

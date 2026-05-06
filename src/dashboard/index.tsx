@@ -90,7 +90,9 @@ export function Dashboard({ runtime }: { runtime: Runtime }) {
           append(p.trim() ? p.slice(-Math.max(500, Math.min(limit, 20000))) : `(log/${day}.md пуст или ещё не создан)`);
           break;
         }
-        case "help": append(":status :why :amnesia <мин> [chatId] :reset :stage <id> :wake [chatId] :debug [chatId] :pause :resume :cringe :relationship :persona :log [YYYY-MM-DD] [chars] :block [chatId] :unblock [chatId] :read [chatId] :clear-chat [chatId] [--revoke] :report-spam [chatId] :delete-last [chatId] [--local] :edit-last <text> :sticker [chatId] :quit"); break;
+        case "cal": append(await runtime.cmdCal(rest[0], ...rest.slice(1))); break;
+        case "privacy": append(await runtime.cmdPrivacy(rest[0])); break;
+        case "help": append(":status :why :amnesia <мин> [chatId] :reset :stage <id> :wake [chatId] :debug [chatId] :pause :resume :cringe :relationship :persona :log [YYYY-MM-DD] [chars] :privacy [open|owner-only] :cal [list] | :cal add YYYY-MM-DD [HH:MM] название | :cal del <id> :block [chatId] :unblock [chatId] :read [chatId] :clear-chat [chatId] [--revoke] :report-spam [chatId] :delete-last [chatId] [--local] :edit-last <text> :sticker [chatId] :quit"); break;
         case "quit": case "exit": await runtime.stop(); exit(); break;
         default: append(`неизвестная команда: ${head}`);
       }

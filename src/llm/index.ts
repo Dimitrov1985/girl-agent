@@ -32,21 +32,37 @@ class OpenAILike implements LLMClient {
     });
   }
   async chat(messages: ChatMessage[], opts: LLMOptions = {}): Promise<string> {
-    const res = await this.client.chat.completions.create({
+    const mapped = messages.map(m => ({
+      role: m.role,
+      content: typeof m.content === "string"
+        ? m.content
+        : m.content.map(p => p.type === "text"
+          ? { type: "text" as const, text: p.text }
+          : { type: "image_url" as const, image_url: { url: `data:${p.mimeType};base64,${p.data}` } })
+    })) as any;
+
+    const params = {
       model: this.cfg.model,
-      messages: messages.map(m => ({
-        role: m.role,
-        content: typeof m.content === "string"
-          ? m.content
-          : m.content.map(p => p.type === "text"
-            ? { type: "text" as const, text: p.text }
-            : { type: "image_url" as const, image_url: { url: `data:${p.mimeType};base64,${p.data}` } })
-      })) as any,
+      messages: mapped,
       temperature: opts.temperature ?? 0.85,
       max_tokens: opts.maxTokens ?? 600,
-      response_format: opts.json ? { type: "json_object" } : undefined
-    });
-    return res.choices[0]?.message?.content?.trim() ?? "";
+    };
+
+    try {
+      const res = await this.client.chat.completions.create({
+        ...params,
+        response_format: opts.json ? { type: "json_object" as const } : undefined
+      });
+      return res.choices[0]?.message?.content?.trim() ?? "";
+    } catch (e: any) {
+      // Local/custom models (LMStudio, Ollama, etc.) may not support response_format.
+      // Retry without it and let the caller parse whatever comes back.
+      if (opts.json && (e?.status === 400 || e?.status === 422 || /response_format|json_object/i.test(e?.message ?? ""))) {
+        const res = await this.client.chat.completions.create(params);
+        return res.choices[0]?.message?.content?.trim() ?? "";
+      }
+      throw e;
+    }
   }
 }
 

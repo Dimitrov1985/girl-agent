@@ -114,6 +114,8 @@ export interface ProfileConfig {
   communication?: CommunicationProfile;
   personaNotes?: string;
   busySchedule?: BusySlot[];
+  /** "open" — отвечает всем (default); "owner-only" — только владельцу */
+  privacy?: "open" | "owner-only";
 }
 
 export interface RelationshipScore {

@@ -190,6 +190,10 @@ export interface BuildPromptCtx {
   romanticApproach?: boolean;
   realism?: RealismContext;
   media?: IncomingMedia;
+  /** Текущая погода (из weather.ts) */
+  weather?: string;
+  /** Ближайшие события календаря (из calendar.ts) */
+  calendarContext?: string;
 }
 
 export async function buildSystemPrompt(cfg: ProfileConfig, ctx: BuildPromptCtx = {}): Promise<string> {
@@ -285,6 +289,8 @@ ${ctx.romanticApproach ? `Последнее сообщение выглядит
     communicationFragment,
     `# ТЫ — ${cfg.name}, ${cfg.age}, ${cfg.nationality === "UA" ? "Украина" : "Россия / СНГ"}`,
     `Часовой пояс: ${cfg.tz}. У тебя сейчас: ${localTime}. Паттерн присутствия в тг: ${presenceProfile.pattern}. Учитывай — глубокая ночь = либо спишь и не отвечаешь, либо тревожно. Утро = вяло. День/вечер = активна.`,
+    ctx.weather || "",
+    ctx.calendarContext || "",
     cfg.nationality === "UA"
       ? `# Язык
 Пишешь НА РУССКОМ. Реальные девушки в украинском тг чаще пишут русским — не выпендривайся чисто-украинским. Допустим лёгкий суржик: пара украинских слов в неделю переписки ('шо', 'мабуть', 'трохи', 'як', 'ну шо', 'дякую') — но не больше ~10% текста. Полностью на украинском НЕ пиши, это нереалистично для тг.`

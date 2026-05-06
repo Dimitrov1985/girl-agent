@@ -23,6 +23,8 @@ import { loadRealismContext, maybeAdvanceRelationshipTimeline, recordInteraction
 import { describeIncomingMedia, imagePartFromMedia } from "./media.js";
 import { looksLikeJailbreak, sanitizeModelReply, silentErrorLabel } from "./security.js";
 import { addStickerToLibrary, pickSticker } from "./stickers.js";
+import { getWeatherContext } from "./weather.js";
+import { getCalendarContext, addCalendarEvent, readCalendar, removeCalendarEvent } from "./calendar.js";
 import { EventEmitter } from "node:events";
 
 export interface RuntimeEvent {
@@ -420,6 +422,10 @@ export class Runtime extends EventEmitter {
     this.exchangeCount.set(key, (this.exchangeCount.get(key) ?? 0) + 1);
 
     if (!isPrimary) {
+      if ((this.cfg.privacy ?? "open") === "owner-only") {
+        this.emit("event", { type: "ignored", text: m.text, reason: "privacy:owner-only" } as RuntimeEvent);
+        return;
+      }
       const romanticApproach = this.isRomanticApproach(incomingText);
       if (await this.maybeBlockAfterBoundary(m.chatId, incomingText, romanticApproach)) return;
       const tick = this.acquaintanceTick(romanticApproach);
@@ -571,6 +577,12 @@ export class Runtime extends EventEmitter {
     const conflict = scope === "primary" ? await readConflict(this.cfg.slug) : undefined;
     const lastUser = hist[hist.length - 1]?.role === "user" ? hist[hist.length - 1]?.content : undefined;
     const realism = scope === "primary" ? await loadRealismContext(this.cfg, lastUser) : undefined;
+    const [weather, calendarCtx] = scope === "primary"
+      ? await Promise.all([
+          getWeatherContext(this.cfg.tz).catch(() => ""),
+          getCalendarContext(this.cfg.slug, this.cfg.tz).catch(() => "")
+        ])
+      : ["", ""];
     const sys = await buildSystemPrompt(this.cfg, {
       dailyLife: this.dailyLife,
       conflict,
@@ -579,7 +591,9 @@ export class Runtime extends EventEmitter {
       committedPrimary: this.primaryIsCommitted(),
       romanticApproach,
       realism,
-      media: incoming?.media
+      media: incoming?.media,
+      weather,
+      calendarContext: calendarCtx
     });
     const scopeHint = scope === "acquaintance"
       ? "\nЭто сторонний личный чат, не основной парень. Не используй память/отношения основного парня. Если заход романтический — поставь границу. Если вопрос обычный — ответь по легенде коротко."
@@ -640,6 +654,13 @@ export class Runtime extends EventEmitter {
   private async tickAgenda(): Promise<void> {
     if (this.paused) return;
     if (this.cfg.stage === "dumped") return;
+
+    // Очищаем устаревшие записи pendingProactive (старше 30 мин без ответа)
+    const now = Date.now();
+    for (const [key, pp] of this.pendingProactive) {
+      if (now - pp.sentAt > 30 * 60 * 1000) this.pendingProactive.delete(key);
+    }
+
     if (this.cfg.ownerId) {
       const key = this.histKey(this.cfg.ownerId);
       const hist = await this.historyFor(key, this.cfg.ownerId, true);
@@ -1159,6 +1180,45 @@ export class Runtime extends EventEmitter {
     } catch (e) {
       this.emit("event", { type: "error", text: `AI tool failed ${cmd}: ${(e as Error).message}` } as RuntimeEvent);
     }
+  }
+
+  async cmdCal(sub?: string, ...args: string[]): Promise<string> {
+    if (!sub || sub === "list") {
+      const events = await readCalendar(this.cfg.slug);
+      if (!events.length) return "календарь пуст";
+      return events.map(e => `[${e.id}] ${e.date}${e.time ? " " + e.time : ""} — ${e.title}${e.notes ? " (" + e.notes + ")" : ""}`).join("\n");
+    }
+    if (sub === "add") {
+      // :cal add YYYY-MM-DD [HH:MM] "название" [заметки]
+      const dateArg = args[0];
+      if (!dateArg || !/^\d{4}-\d{2}-\d{2}$/.test(dateArg)) return "usage: :cal add YYYY-MM-DD [HH:MM] название [заметки]";
+      let timeArg: string | undefined;
+      let titleStart = 1;
+      if (args[1] && /^\d{2}:\d{2}$/.test(args[1])) { timeArg = args[1]; titleStart = 2; }
+      const title = args.slice(titleStart).join(" ").trim();
+      if (!title) return "укажи название события";
+      const ev = await addCalendarEvent(this.cfg.slug, title, dateArg, timeArg);
+      return `добавлено [${ev.id}]: ${ev.date}${ev.time ? " " + ev.time : ""} — ${ev.title}`;
+    }
+    if (sub === "del" || sub === "rm") {
+      const id = args[0];
+      if (!id) return "usage: :cal del <id>";
+      const ok = await removeCalendarEvent(this.cfg.slug, id);
+      return ok ? `удалено [${id}]` : `событие [${id}] не найдено`;
+    }
+    return "usage: :cal [list] | :cal add YYYY-MM-DD [HH:MM] название | :cal del <id>";
+  }
+
+  async cmdPrivacy(mode?: string): Promise<string> {
+    if (!mode) {
+      return `privacy: ${this.cfg.privacy ?? "open"} (owner: ${this.cfg.ownerId ?? "не задан"})`;
+    }
+    if (mode !== "open" && mode !== "owner-only") {
+      return "usage: :privacy open|owner-only";
+    }
+    this.cfg.privacy = mode;
+    await writeConfig(this.cfg);
+    return `privacy → ${mode}`;
   }
 }
 

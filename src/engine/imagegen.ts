@@ -4,9 +4,8 @@
 
 import OpenAI from "openai";
 import { readMd } from "../storage/md.js";
-import type { ProfileConfig } from "../types.js";
-import type { DailyLife } from "./daily-life.js";
-import type { RelationshipScore } from "../types.js";
+import type { ProfileConfig, RelationshipScore } from "../types.js";
+import { currentBlock, type DailyLife } from "./daily-life.js";
 
 export type ImageGenProvider = "dalle3" | "stability";
 
@@ -42,7 +41,6 @@ function moodFromScore(score?: Partial<RelationshipScore>): "happy" | "neutral" 
 function contextFromDailyLife(dl?: DailyLife, tz?: string): string {
   if (!dl || !tz) return "at home, cozy room in background";
   try {
-    const { currentBlock } = require("./daily-life.js") as typeof import("./daily-life.js");
     const block = currentBlock(dl, tz);
     if (!block) return "at home, cozy room in background";
     const a = block.activity.toLowerCase();

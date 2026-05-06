@@ -1,0 +1,16 @@
+services:
+  girl-agent:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    environment:
+      # Имя профиля (slug). Если пусто — загружает единственный профиль автоматически.
+      GIRL_AGENT_PROFILE: "${GIRL_AGENT_PROFILE:-}"
+      # Включить debug-логи telegram (1 = да)
+      GIRL_AGENT_DEBUG: "${GIRL_AGENT_DEBUG:-0}"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

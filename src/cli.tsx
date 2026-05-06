@@ -217,9 +217,28 @@ function personaNotesForGeneration(cfg: ProfileConfig): string {
 async function runRuntime(cfg: ProfileConfig) {
   const rt = new Runtime(cfg);
   await rt.start();
-  const inst = render(<Dashboard runtime={rt} />, { exitOnCtrlC: true });
-  process.on("SIGINT", async () => { await rt.stop(); inst.unmount(); process.exit(0); });
-  await inst.waitUntilExit();
+
+  if (process.stdout.isTTY) {
+    // Интерактивный режим — ink дашборд
+    const inst = render(<Dashboard runtime={rt} />, { exitOnCtrlC: true });
+    const shutdown = async () => { await rt.stop(); inst.unmount(); process.exit(0); };
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+    await inst.waitUntilExit();
+  } else {
+    // Headless режим — Docker / systemd / PM2, логи в stdout
+    process.stdout.write(`[girl-agent] запущен: ${cfg.name} (${cfg.slug})\n`);
+    rt.on("event", (e: import("./engine/runtime.js").RuntimeEvent) => {
+      const t = new Date().toISOString();
+      const tag = e.type === "incoming" ? "←" : e.type === "outgoing" ? "→" : e.type === "error" ? "ERR" : "INF";
+      process.stdout.write(`[${t}] [${tag}] ${e.text ?? ""}${e.chatId ? ` (${e.chatId})` : ""}\n`);
+    });
+    const shutdown = async () => { await rt.stop(); process.exit(0); };
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+    await new Promise(() => {}); // работаем пока не получим сигнал
+  }
+
   await rt.stop();
 }
 

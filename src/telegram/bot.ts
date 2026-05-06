@@ -27,7 +27,14 @@ export function makeBotAdapter(cfg: ProfileConfig): TgAdapter {
       bot.start({ drop_pending_updates: true }).catch(() => {});
     },
     async sendText(chatId, text) {
-      const msg = await bot.api.sendMessage(chatId as number, text, { parse_mode: "MarkdownV2" });
+      // Используем MarkdownV2 только если есть спойлеры ||текст||, иначе plain text
+      const hasSpoiler = /\|\|.+?\|\|/.test(text);
+      if (hasSpoiler) {
+        const escaped = escapeMarkdownV2(text);
+        const msg = await bot.api.sendMessage(chatId as number, escaped, { parse_mode: "MarkdownV2" });
+        return msg.message_id;
+      }
+      const msg = await bot.api.sendMessage(chatId as number, text);
       return msg.message_id;
     },
     async setTyping(chatId, on) {
@@ -59,6 +66,18 @@ export function makeBotAdapter(cfg: ProfileConfig): TgAdapter {
       await bot.stop();
     }
   };
+}
+
+/** Экранирует спецсимволы MarkdownV2, сохраняя спойлеры ||текст|| */
+function escapeMarkdownV2(text: string): string {
+  // Разбиваем на части: спойлеры и обычный текст
+  const parts = text.split(/(\|\|.+?\|\|)/);
+  return parts.map((part, i) => {
+    // Нечётные части — это спойлеры, оставляем как есть
+    if (i % 2 === 1) return part;
+    // Чётные — обычный текст, экранируем
+    return part.replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+  }).join("");
 }
 
 function detectBotMedia(message: any): IncomingMedia | undefined {

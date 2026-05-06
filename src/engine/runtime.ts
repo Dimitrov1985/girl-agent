@@ -1290,6 +1290,47 @@ export class Runtime extends EventEmitter {
     }
   }
 
+  async cmdAppearance(sub?: string): Promise<string> {
+    if (sub === "show") {
+      const appearance = await readMd(this.cfg.slug, "memory/appearance.md");
+      return appearance.trim() || "(appearance.md пуст — запусти :appearance для генерации)";
+    }
+
+    if (sub === "preview") {
+      if (!this.cfg.imagegen) return "imagegen не настроен — добавь DALL-E или Stability AI в config.json";
+      if (!this.actionAvailable("sendPhoto")) return "sendPhoto недоступен в текущем режиме";
+      const chatId = this.cfg.ownerId;
+      if (!chatId) return "owner не определён — сначала напиши боту";
+      const appearance = await readMd(this.cfg.slug, "memory/appearance.md");
+      if (!appearance.trim()) return "appearance.md пуст — сначала запусти :appearance";
+      this.emit("event", { type: "info", text: "imagegen: генерирую тестовое фото..." } as RuntimeEvent);
+      const rel = await readRelationship(this.cfg.slug);
+      const image = await generateSelfie(this.cfg, this.cfg.imagegen, this.dailyLife, rel.score);
+      await this.tg.sendPhoto?.(chatId, image, "тест");
+      return "тестовое фото отправлено в чат";
+    }
+
+    // Генерируем appearance.md из persona.md
+    const persona = await readMd(this.cfg.slug, "persona.md");
+    if (!persona.trim()) return "persona.md пуст — сначала создай профиль через wizard";
+
+    const raw = await this.llm.chat([
+      {
+        role: "system",
+        content: "You extract visual appearance from character profiles for DALL-E image generation. Output ONLY comma-separated English keywords describing: hair (color+length+style), eye color, face features, skin tone, body type, typical clothing style. Max 40 words. No quotes, no explanation, no sentences."
+      },
+      {
+        role: "user",
+        content: `Character profile (Russian):\n${persona.slice(0, 2000)}\n\nName: ${this.cfg.name}, age: ${this.cfg.age}`
+      }
+    ], { temperature: 0.7, maxTokens: 120 });
+
+    const appearance = raw.trim();
+    if (!appearance) return "LLM вернул пустой ответ, попробуй ещё раз";
+    await writeMd(this.cfg.slug, "memory/appearance.md", appearance);
+    return `appearance.md обновлён:\n${appearance}\n\nПроверь: :appearance show\nТест фото: :appearance preview`;
+  }
+
   async cmdCal(sub?: string, ...args: string[]): Promise<string> {
     if (!sub || sub === "list") {
       const events = await readCalendar(this.cfg.slug);

@@ -173,28 +173,33 @@ export async function behaviorTick(
       };
     }
     // Иначе ответ — но короткий и медленный
-    const parsed = await llm.chat(
-      [{ role: "system", content: SYS }, { role: "user", content: TEMPLATE(state, history, incoming, ctx, reactionsHint) }],
-      { temperature: 0.7, maxTokens: 3500, json: true }
-    );
-    const result = JSON.parse(parsed);
-    return {
-      shouldReply: true,
-      shouldRead: true,
-      delaySec: clamp(result.delaySec ?? 20, 10, 120),
-      bubbles: 1,
-      typing: result.typing ?? true,
-      ignoreReason: undefined,
-      moodDelta: result.moodDelta || { annoyance: 3 },
-      intent: "short",
-      reaction: undefined
-    };
+    try {
+      const parsed = await llm.chat(
+        [{ role: "system", content: SYS }, { role: "user", content: TEMPLATE(state, history, incoming, ctx, reactionsHint) }],
+        { temperature: 0.7, maxTokens: 400, json: true }
+      );
+      const result = JSON.parse(parsed);
+      return {
+        shouldReply: true,
+        shouldRead: true,
+        delaySec: clamp(result.delaySec ?? 20, 10, 120),
+        bubbles: 1,
+        typing: result.typing ?? true,
+        ignoreReason: undefined,
+        moodDelta: result.moodDelta || { annoyance: 3 },
+        intent: "short",
+        reaction: undefined
+      };
+    } catch {
+      // fallback при ошибке — отвечаем медленно и коротко
+      return { shouldReply: true, shouldRead: true, delaySec: 15, bubbles: 1, typing: true, moodDelta: {}, intent: "short" };
+    }
   }
 
   try {
     const raw = await llm.chat(
       [{ role: "system", content: SYS }, { role: "user", content: TEMPLATE(state, history, incoming, ctx, reactionsHint) }],
-      { temperature: 0.7, maxTokens: 3500, json: true }
+      { temperature: 0.7, maxTokens: 400, json: true }
     );
     const parsed = JSON.parse(raw);
 

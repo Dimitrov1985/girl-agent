@@ -726,7 +726,7 @@ export class Runtime extends EventEmitter {
     let reply = "";
     try {
       if (tick.typing) await this.tg.setTyping(chatId, true);
-      reply = sanitizeModelReply(await this.llm.chat(messages, { temperature: 0.95, maxTokens: 3500 }));
+      reply = sanitizeModelReply(await this.llm.chat(messages, { temperature: 0.95, maxTokens: 500 }));
     } catch (e) {
       this.emit("event", { type: "error", text: silentErrorLabel(e) } as RuntimeEvent);
       await this.sendSafeFallback(chatId, hist, scope);

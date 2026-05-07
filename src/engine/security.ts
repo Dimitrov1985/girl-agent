@@ -24,6 +24,8 @@ export function isTechnicalError(e: unknown): boolean {
 
 export function silentErrorLabel(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e ?? "unknown");
+  // Временно логируем реальную ошибку для диагностики
+  if (process.env.GIRL_AGENT_DEBUG === "1") process.stderr.write(`[debug error] ${msg}\n`);
   if (isTechnicalError(e)) return "llm/provider unavailable";
   return msg.slice(0, 160);
 }

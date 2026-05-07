@@ -665,6 +665,9 @@ export class Runtime extends EventEmitter {
     }
     // Кламп на 1 час чтобы не держать бесконечные timeout-ы
     delaySec = Math.min(delaySec, presence.busy ? 24 * 3600 : 3600);
+    // Forced wake — отвечаем быстро независимо от того что решил LLM
+    const isForced = Date.now() < this.forcedWakeUntil;
+    if (isForced) delaySec = Math.min(delaySec, 15);
     this.scheduleReply(key, m.chatId, hist, tick, "primary", false, m, presence.hint, delaySec);
     } catch (e) {
       this.emit("event", { type: "error", text: `handleIncoming: ${silentErrorLabel(e)}` } as RuntimeEvent);

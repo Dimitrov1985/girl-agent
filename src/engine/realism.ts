@@ -100,18 +100,15 @@ export async function loadRealismContext(cfg: ProfileConfig, incoming?: string):
 }
 
 export function realismPromptFragment(ctx: RealismContext): string {
+  const s = (str: string, max: number) => str.slice(0, max);
   return [
     "# Реалистичная непрерывность",
-    "Используй эти данные как фон, а не как отчёт. Не говори, что у тебя есть память, файлы, факты или система.",
-    "Если точного факта нет — не выдумывай уверенно; отвечай уклончиво или уточняй по-человечески.",
-    "## Факты о нём", ctx.facts,
-    "## Эпизоды текущего дня", ctx.episodes || "пока нет ярких эпизодов",
-    "## История отношений", ctx.relationshipTimeline,
-    "## Привязанность и характер", ctx.attachment,
-    "## Время, обещания, открытые петли", ctx.time || "нет открытых петель",
-    "## Недельная жизнь", ctx.weeklyLife,
-    "## Социальный круг", ctx.socialGraph,
-    "## Привычки", ctx.habits
+    "Используй как фон. Не упоминай что у тебя есть файлы/память. Если факта нет — не выдумывай.",
+    ctx.facts ? `## Факты о нём\n${s(ctx.facts, 600)}` : "",
+    ctx.episodes ? `## Эпизоды дня\n${s(ctx.episodes, 400)}` : "",
+    ctx.relationshipTimeline ? `## История\n${s(ctx.relationshipTimeline, 400)}` : "",
+    ctx.time ? `## Обещания/петли\n${s(ctx.time, 300)}` : "",
+    ctx.habits ? `## Привычки\n${s(ctx.habits, 300)}` : "",
   ].filter(Boolean).join("\n\n");
 }
 

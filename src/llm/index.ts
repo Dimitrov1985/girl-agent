@@ -23,6 +23,23 @@ export interface LLMClient {
   chat(messages: ChatMessage[], opts?: LLMOptions): Promise<string>;
 }
 
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 2000): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < retries; i++) {
+    try { return await fn(); } catch (e: any) {
+      lastErr = e;
+      const status = e?.status ?? e?.response?.status;
+      // Retry only on rate limit (429) or server errors (5xx)
+      if (status === 429 || (status >= 500 && status < 600)) {
+        await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr;
+}
+
 class OpenAILike implements LLMClient {
   private client: OpenAI;
   constructor(private cfg: ProfileConfig["llm"]) {
@@ -48,21 +65,22 @@ class OpenAILike implements LLMClient {
       max_tokens: opts.maxTokens ?? 600,
     };
 
-    try {
-      const res = await this.client.chat.completions.create({
-        ...params,
-        response_format: opts.json ? { type: "json_object" as const } : undefined
-      });
-      return res.choices[0]?.message?.content?.trim() ?? "";
-    } catch (e: any) {
-      // Local/custom models (LMStudio, Ollama, etc.) may not support response_format.
-      // Retry without it and let the caller parse whatever comes back.
-      if (opts.json && (e?.status === 400 || e?.status === 422 || /response_format|json_object/i.test(e?.message ?? ""))) {
-        const res = await this.client.chat.completions.create(params);
+    return withRetry(async () => {
+      try {
+        const res = await this.client.chat.completions.create({
+          ...params,
+          response_format: opts.json ? { type: "json_object" as const } : undefined
+        });
         return res.choices[0]?.message?.content?.trim() ?? "";
+      } catch (e: any) {
+        // Local/custom models (LMStudio, Ollama, etc.) may not support response_format.
+        if (opts.json && (e?.status === 400 || e?.status === 422 || /response_format|json_object/i.test(e?.message ?? ""))) {
+          const res = await this.client.chat.completions.create(params);
+          return res.choices[0]?.message?.content?.trim() ?? "";
+        }
+        throw e;
       }
-      throw e;
-    }
+    });
   }
 }
 
@@ -103,15 +121,17 @@ class AnthropicLike implements LLMClient {
       merged.push({ role: "user", content: "(продолжай)" });
     }
 
-    const res = await this.client.messages.create({
-      model: this.cfg.model,
-      system: system || undefined,
-      max_tokens: opts.maxTokens ?? 600,
-      temperature: opts.temperature ?? 0.85,
-      messages: merged.map(m => ({ role: m.role, content: anthropicContent(m.content) })) as any
+    return withRetry(async () => {
+      const res = await this.client.messages.create({
+        model: this.cfg.model,
+        system: system || undefined,
+        max_tokens: opts.maxTokens ?? 600,
+        temperature: opts.temperature ?? 0.85,
+        messages: merged.map(m => ({ role: m.role, content: anthropicContent(m.content) })) as any
+      });
+      const block = res.content.find(c => c.type === "text");
+      return block && "text" in block ? block.text.trim() : "";
     });
-    const block = res.content.find(c => c.type === "text");
-    return block && "text" in block ? block.text.trim() : "";
   }
 }
 
